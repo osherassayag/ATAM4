@@ -1,0 +1,3 @@
+C:/Users/roro1/CLionProjects/ATAM4/cmake-build-debug/CMakeFiles/ATAM4.dir
+C:/Users/roro1/CLionProjects/ATAM4/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/roro1/CLionProjects/ATAM4/cmake-build-debug/CMakeFiles/rebuild_cache.dir
