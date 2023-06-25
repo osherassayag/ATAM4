@@ -16,6 +16,8 @@
 
 #include "elf64.h"
 
+#define SHT_RELA 11
+
 unsigned long find_dynamic(char* funName, char* exeName)
 {
     FILE *elf = fopen(exeName, "r");
