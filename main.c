@@ -34,12 +34,9 @@ int main(int argc, char *const argv[]) {
 
     while (WIFSTOPPED(wait_statuss))
     {
-        // TODO: ADD CHECK IF TERMINATED.
-
-
-        
+     
         // We reached the call breakpoint.
-        ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)data);
+        if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)data));
         ptrace(PTRACE_GETREGS, childPid, 0,&regs);
         printf("PRF:: run #%d first parameter is %llx\n",++callCounter, regs.rax);
 
@@ -57,6 +54,8 @@ int main(int argc, char *const argv[]) {
         printf("PRF:: run #%d returned with %llx\n",callCounter, regs.rax);
         ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_call);
         ptrace(PTRACE_CONT, childPid, NULL, NULL);
+
+        wait(&wait_status);
     }
 
     
@@ -73,17 +72,9 @@ pid_t run_target(char* const exe_name)
     }
     else if (childPid == 0)
     {
-        if (ptrace(PTRACE_TRACEME,0, NULL, NULL) < 0)
-        {
-            perror("ptrace");
-            exit(1);
-        }
+        ptrace(PTRACE_TRACEME,0, NULL, NULL)
         execl(exe_name, exe_name, NULL);
         
-    }else
-    {
-        perror("fork");
-        exit(1);
     }
     
 }
