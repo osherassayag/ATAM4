@@ -85,20 +85,20 @@ Elf64_Addr find_symbol(char* symbol_name, char* exe_file_name, int* error_val) {
     int offset = 0, index = 0, strtab_offset = 0;
 
     for (int i = 0; i < elf_header->e_shnum; i++) {
-
+	
         if ((section_header + i)->sh_type == SYMB_TABLE) {
             symbol_table = (Elf64_Sym *) malloc(section_header[i].sh_size * section_header[i].sh_entsize);
             index = i;
             offset = section_header[i].sh_offset;
             //strtab_offset = offset + section_header[i].sh_size;
-        }
+        } 
     if ((section_header + i)->sh_type == STR_TAB && i != elf_header->e_shstrndx) {
             strtab_offset = section_header[i].sh_offset;
-        }
+        } 
 
     }
-
-
+ 
+ 
 
     //Reading symbol table
     unsigned long num_of_entries = section_header[index].sh_size / section_header[index].sh_entsize;
@@ -251,13 +251,13 @@ Elf64_Addr find_dynamic(char* funName, char* exeName)
     //The name of the symbol we're looking for
     char* symb_name = NULL, *rela_name = NULL;
     //The index in the dynsym table
-    unsigned long dyn_index = 0;
+    unsigned long dyn_index = 0; 
     int dyn_offset = 0;
 
     //Now going over the reallocation sections
     for (int i = 0; i < elf_header->e_shnum; i++) {
         //Finding the rela.plt section
-
+	
         if (ELF64_ST_TYPE(section_header[i].sh_type) == SHT_RELA) {
 		printf("Found rela\n");
                 rela_plt = (Elf64_Rela *) malloc(section_header[i].sh_size * section_header[i].sh_entsize);
@@ -285,16 +285,16 @@ Elf64_Addr find_dynamic(char* funName, char* exeName)
                     if (strcmp(symb_name, funName) == 0) {
 			printf("Found function %s\n", symb_name);
                         dyn_offset = rela_plt[j].r_offset;
-			printf("offset = 0x%lx\n", rela_plt[j].r_offset);
+			printf("offset = 0x%lx\n", rela_plt[j].r_offset);			
 
                         free_and_close(elf, elf_header, dyn_symb, section_header, symb_name, rela_plt);
                         return dyn_offset;
                     }
                 }
-
+           
         }
         //Shouldn't get here
-
+       
     }
     return 0;
 
@@ -348,81 +348,6 @@ int main(int argc, char *const argv[]) {
 
 
     pid_t childPid = run_target(argv[2]);
-    unsigned long call_counter = 0;
-    int wait_status;
-    struct user_regs_struct regs;
-    unsigned long newAddr = addr;
-    unsigned long long rsp;
-    long data, rspAddr, rspData;
-    waitpid(childPid, &wait_status, 0);
-    if(dynamic) {
-        newAddr = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr, NULL);
-        newAddr -= 6;
-    }
-    bool isFuncStart = false;
-    while(WIFSTOPPED(wait_status)) {
-        ptrace(PTRACE_GETREGS, childPid, 0, &regs);
-        if(isFuncStart)
-        {
-            ptrace(PTRACE_POKETEXT, childPid, (void*) newAddr, (void *) data);
-            regs.rip -= 1;
-            ptrace(PTRACE_SETREGS, childPid, 0, &regs);
-            rspAddr= regs.rsp;
-            rsp = ptrace(PTRACE_PEEKTEXT, childPid, (void*) rspAddr, NULL);
-            rspData =  ptrace(PTRACE_PEEKTEXT, childPid, (void*)rsp, NULL);
-            unsigned long rsp_trap = (rspData & 0xFFFFFFFFFFFFFF00) | 0xCC;
-            ptrace(PTRACE_POKETEXT, childPid, (void*)rsp, (void*) rsp_trap);
-            isFuncStart = false;
-        }
-
-        else {
-            if(call_counter > 0) {
-                if(call_counter == 1 && dynamic) {
-                    newAddr = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr, NULL);
-
-                }
-                if(rspAddr < regs.rsp) {
-                    printf("PRF:: run #%ld returned with %d\n", call_counter, (int)regs.rax);
-                    ptrace(PTRACE_POKETEXT, childPid, (void*)rsp, (void*)rspData);
-                    regs.rip -=1;
-                    ptrace(PTRACE_SETREGS, childPid, 0, &regs);
-                    data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)newAddr, NULL);
-
-                    unsigned long data_trap = (data & 0xFFFFFFFFFFFFFF00) | 0xCC;
-                    ptrace(PTRACE_POKETEXT, childPid, (void*)newAddr, (void*)data_trap);
-                    call_counter++;
-                    isFuncStart = true;
-                }
-                else{
-                    unsigned long current_data = ptrace(PTRACE_PEEKTEXT, childPid, (void*) rsp, NULL);
-                    ptrace(PTRACE_POKETEXT, childPid, (void*)rsp, rspData);
-                    regs.rip -= 1;
-                    ptrace(PTRACE_SETREGS, childPid, 0, &regs);
-                    if(ptrace(PTRACE_SINGLESTEP, childPid, NULL, NULL) < 0)
-                    {
-                        perror("error");
-                        return 0;
-                    }
-                    waitpid(childPid, &wait_status, 0);
-                    ptrace(PTRACE_POKETEXT, childPid, (void*)rsp, (void*)current_data);
-
-                }
-
-            } else{
-                call_counter++;
-                data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)newAddr, NULL);
-                unsigned long data_trap = (data & 0xFFFFFFFFFFFFFF00) | 0xCC;
-                ptrace(PTRACE_POKETEXT, childPid, (void*)newAddr, (void*)data_trap);
-                isFuncStart = true;
-
-            }
-            ptrace(PTRACE_CONT, childPid, NULL, NULL);
-            waitpid(childPid, &wait_status, 0);
-        }
-
-        ptrace(PTRACE_POKETEXT, childPid, (void*)newAddr, (void*)data);
-    }
-    /*
     struct user_regs_struct regs;
     int callCounter = 0;
     int wait_status;
@@ -433,8 +358,9 @@ int main(int argc, char *const argv[]) {
     	got_entry = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr,NULL);
 	data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)(got_entry - 6),NULL);
     }
-     else
-	data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr,NULL);
+     else {
+	data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)(addr),NULL);
+	}
     unsigned long breakpoint_call = (data & 0xFFFFFFFFFFFFFF00) | 0xCC;
     // Set up the first breakpoint for the function.
    if(dynamic) {
@@ -443,18 +369,18 @@ int main(int argc, char *const argv[]) {
      else
 	ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_call);
     ptrace(PTRACE_CONT, childPid, NULL, NULL);
-
+ 
     while (WIFSTOPPED(wait_status))
     {
 	if(WIFEXITED(wait_status))
 		return 0;
-
+     	
         // We reached the call breakpoint.
 	if(dynamic) {
-        	if(ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)data));
+        	if(ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)data));	
 	}
 	else
-		if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)data));
+		if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)data));        
 	ptrace(PTRACE_GETREGS, childPid, 0,&regs);
         printf("PRF:: run #%d first parameter is %lld\n",++callCounter, regs.rax);
 
@@ -466,7 +392,7 @@ int main(int argc, char *const argv[]) {
         	if(ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)breakpoint_ret));
 	}
 	else
-		if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_ret));
+		if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_ret)); 
         ptrace(PTRACE_CONT, childPid, NULL, NULL);
 
         // Remove the ret breakpoint and set up the call breakpoint.
@@ -475,7 +401,7 @@ int main(int argc, char *const argv[]) {
         ptrace(PTRACE_GETREGS, childPid, 0,&regs);
         printf("PRF:: run #%d returned with %lld\n",callCounter, regs.rax);
 	if(dynamic) {
-        	ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)breakpoint_call);
+        	ptrace(PTRACE_POKETEXT, childPid, (void*)got_entry - 6,(void*)breakpoint_call);
 	}
 	else {
 		ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_call);
@@ -484,8 +410,8 @@ int main(int argc, char *const argv[]) {
 	dynamic = false;
         wait(&wait_status);
     }
-    */
 
+    
     return 0;
 }
 
@@ -501,7 +427,7 @@ pid_t run_target(char* const exe_name)
     {
         ptrace(PTRACE_TRACEME,0, NULL, NULL);
         execl(exe_name, exe_name, NULL);
-
+        
     }
-
-}
+    
+} 
