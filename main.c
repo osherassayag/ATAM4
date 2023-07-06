@@ -352,66 +352,77 @@ int main(int argc, char *const argv[]) {
     int callCounter = 0;
     int wait_status;
     wait(&wait_status);
-    long data, got_entry;
+    unsigned long data;
+    unsigned long fun_addr = addr;
+    unsigned long stack_pointer;
+    unsigned long nested_op;
     if(dynamic)
     {
-    	got_entry = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr,NULL);
-	data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)(got_entry - 6),NULL);
+    	fun_addr = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr,NULL) - 6;
     }
-     else {
 	data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)(addr),NULL);
-	}
+
     unsigned long breakpoint_call = (data & 0xFFFFFFFFFFFFFF00) | 0xCC;
     // Set up the first breakpoint for the function.
-   if(dynamic) {
-    	ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)breakpoint_call);
-	}
-     else
-	ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_call);
+    ptrace(PTRACE_POKETEXT, childPid, (void*)(fun_addr),(void*)breakpoint_call);
     ptrace(PTRACE_CONT, childPid, NULL, NULL);
- 
+     wait(&wait_status);
+
     while (WIFSTOPPED(wait_status))
     {
-	if(WIFEXITED(wait_status))
+	    if(WIFEXITED(wait_status))
+        {
 		return 0;
-     	
+        }
         // We reached the call breakpoint.
-	if(dynamic) {
-        	if(ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)data));	
-	}
-	else
-		if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)data));        
-	ptrace(PTRACE_GETREGS, childPid, 0,&regs);
-        printf("PRF:: run #%d first parameter is %lld\n",++callCounter, regs.rax);
+		ptrace(PTRACE_POKETEXT, childPid, (void*)fun_addr,(void*)data);        
+	    ptrace(PTRACE_GETREGS, childPid, 0,&regs);
+        regs.rip -= 1;
+        stack_pointer = regs.rsp;
+        ptrace(PTRACE_SETREGS, childPid, 0,&regs);
+        printf("PRF:: run #%d first parameter is %lld\n",++callCounter, regs.rdi);
 
         // Set up the ret breakpoint, it would stop only when finishing the function now because there is only one breakpoint.
         unsigned long return_address = ptrace(PTRACE_PEEKDATA, childPid, (void *)(regs.rsp), NULL);
         long ret_data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)return_address,NULL);
         unsigned long breakpoint_ret = (ret_data & 0xFFFFFFFFFFFFFF00) | 0xCC;
-	if(dynamic) {
-        	if(ptrace(PTRACE_POKETEXT, childPid, (void*)(got_entry - 6),(void*)breakpoint_ret));
-	}
-	else
-		if(ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_ret)); 
+	
+		ptrace(PTRACE_POKETEXT, childPid, (void*)return_address,(void*)breakpoint_ret); 
         ptrace(PTRACE_CONT, childPid, NULL, NULL);
-
-        // Remove the ret breakpoint and set up the call breakpoint.
         wait(&wait_status);
-        ptrace(PTRACE_POKETEXT, childPid, (void*)return_address,(void*)ret_data);
+
+        if (dynamic && (callCounter == 1))
+        {
+    	    fun_addr = ptrace(PTRACE_PEEKTEXT, childPid, (void*)addr,NULL) ;
+        }
+
+        while (stack_pointer >= regs.rsp)
+        {
+            ptrace(PTRACE_GETREGS, childPid, 0,&regs);
+            nested_op = ptrace(PTRACE_PEEKTEXT, childPid, (void*)return_address,NULL);
+            ptrace(PTRACE_POKETEXT, childPid, (void*)return_address,(void*)ret_data);
+            regs.rip--;
+            ptrace(PTRACE_SETREGS, childPid, 0,&regs);
+            ptrace(PTRACE_SINGLESTEP, childPid, NULL, NULL);
+            wait(&wait_status);
+            ptrace(PTRACE_POKETEXT, childPid, (void*)return_address,(void*)nested_op);
+            ptrace(PTRACE_CONT, childPid, NULL, NULL);
+            wait(&wait_status);
+
+        }
+        
         ptrace(PTRACE_GETREGS, childPid, 0,&regs);
+        ptrace(PTRACE_POKETEXT, childPid, (void*)return_address,(void*)ret_data);
         printf("PRF:: run #%d returned with %lld\n",callCounter, regs.rax);
-	if(dynamic) {
-        	ptrace(PTRACE_POKETEXT, childPid, (void*)got_entry - 6,(void*)breakpoint_call);
-	}
-	else {
-		ptrace(PTRACE_POKETEXT, childPid, (void*)addr,(void*)breakpoint_call);
-	}
+        regs.rip--;
+        ptrace(PTRACE_SETREGS, childPid, 0,&regs);
+	    data = ptrace(PTRACE_PEEKTEXT, childPid, (void*)(addr),NULL);
+        breakpoint_call = (data & 0xFFFFFFFFFFFFFF00) | 0xCC;
+        ptrace(PTRACE_POKETEXT, childPid, (void*)(fun_addr),(void*)breakpoint_call);
         ptrace(PTRACE_CONT, childPid, NULL, NULL);
-	dynamic = false;
         wait(&wait_status);
-    }
 
-    
+    }
     return 0;
 }
 
